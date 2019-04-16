@@ -167,7 +167,11 @@ void conversionStartFxn(UArg arg0, UArg arg1) {
 
     /* Configure the conversion struct */
     continuousConversion.arg = NULL;
-    continuousConversion.adcChannel = 10;
+    /*continuousConversion.adcChannel = 9;*/
+     if(continuousConversion.adcChannel == 10)
+        continuousConversion.adcChannel = 9;
+    else
+        continuousConversion.adcChannel = 10;
     continuousConversion.sampleBuffer = sampleBufferOne;
     continuousConversion.sampleBufferTwo = sampleBufferTwo;
     continuousConversion.samplesRequestedCount = ADCBUFFERSIZE;
