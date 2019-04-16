@@ -60,11 +60,19 @@
 Task_Struct task0Struct;
 Char task0Stack[TASKSTACKSIZE];
 
-uint16_t sampleBufferOne[ADCBUFFERSIZE];
-uint16_t sampleBufferTwo[ADCBUFFERSIZE];
+uint16_t sampleBufferCh1One[ADCBUFFERSIZE];
+uint16_t sampleBufferCh1Two[ADCBUFFERSIZE];
+uint16_t sampleBufferCh2One[ADCBUFFERSIZE];
+uint16_t sampleBufferCh2Two[ADCBUFFERSIZE];
 uint32_t microVoltBuffer[ADCBUFFERSIZE];
 uint32_t buffersCompletedCounter = 0;
 char uartTxBuffer[10];
+
+uint32_t lastValue = NULL;
+
+ADCBuf_Conversion continuousConversionChannel[2];
+int channelOne = 1;
+int channelTwo = 2;
 
 /* Driver handle shared between the task and the callback function */
 UART_Handle uart;
@@ -77,40 +85,25 @@ UART_Handle uart;
  */
 void adcBufCallback(ADCBuf_Handle handle, ADCBuf_Conversion *conversion,
     void *completedADCBuffer, uint32_t completedChannel) {
-    uint_fast16_t i;
     uint_fast16_t uartTxBufferOffset;
 
-    /* Adjust raw adc values and convert them to microvolts */
     ADCBuf_adjustRawValues(handle, completedADCBuffer, ADCBUFFERSIZE,
         completedChannel);
     ADCBuf_convertAdjustedToMicroVolts(handle, completedChannel,
         completedADCBuffer, microVoltBuffer, ADCBUFFERSIZE);
 
-    /*
-     * Start with a header message and convert each entry in the current buffer
-     * to a human-readable format
-     */
-    //uartTxBufferOffset = System_sprintf(uartTxBuffer,
-      //      "\r\nBuffer %u finished:\r\n", buffersCompletedCounter++);
+    if (conversion->arg == &channelOne) {
+        lastValue = microVoltBuffer[0];
 
-    //System_printf("Microvolts: %d\n", microVoltBuffer[0]);
+        ADCBuf_convert(handle, &continuousConversionChannel[1], 1);
+    } else {
+        uint32_t difference = lastValue - microVoltBuffer[0];
 
-    //uint32_t sum = 0;
+        uartTxBufferOffset = System_sprintf(uartTxBuffer, "%d\n", difference);
+        UART_write(uart, uartTxBuffer, uartTxBufferOffset + 1);
 
-    //for (i = 0; i < ADCBUFFERSIZE; i++) {
-      //  sum += microVoltBuffer[i];
-        //uartTxBufferOffset += System_sprintf(uartTxBuffer + uartTxBufferOffset, "%u,", microVoltBuffer[i]);
-    //}
-
-//    uint32_t avg = sum / ADCBUFFERSIZE;
-
-    uartTxBufferOffset = System_sprintf(uartTxBuffer, "%d\n", microVoltBuffer[0]);
-
-    //uartTxBuffer[uartTxBufferOffset] = '\n';
-    /* Send out the data via UART */
-    UART_write(uart, uartTxBuffer, uartTxBufferOffset + 1);
-
-    //System_flush();
+        ADCBuf_convert(handle, &continuousConversionChannel[0], 1);
+    }
 }
 
 /*
@@ -128,7 +121,6 @@ void conversionStartFxn(UArg arg0, UArg arg1) {
     UART_Params uartParams;
     ADCBuf_Handle adcBuf;
     ADCBuf_Params adcBufParams;
-    ADCBuf_Conversion continuousConversion;
 
 /*
  * The CC2650DK_7ID and CC1310DK_7XD measure an ambient light sensor in this example.
@@ -159,30 +151,31 @@ void conversionStartFxn(UArg arg0, UArg arg1) {
     /* Set up an ADCBuf peripheral in ADCBuf_RECURRENCE_MODE_CONTINUOUS */
     ADCBuf_Params_init(&adcBufParams);
     adcBufParams.callbackFxn = adcBufCallback;
-    adcBufParams.recurrenceMode = ADCBuf_RECURRENCE_MODE_CONTINUOUS;
+    adcBufParams.recurrenceMode = ADCBuf_RECURRENCE_MODE_ONE_SHOT;
     adcBufParams.returnMode = ADCBuf_RETURN_MODE_CALLBACK;
-    adcBufParams.samplingFrequency = 200;
+    adcBufParams.samplingFrequency = 1;
     adcBuf = ADCBuf_open(Board_ADCBuf0, &adcBufParams);
 
 
     /* Configure the conversion struct */
-    continuousConversion.arg = NULL;
-    /*continuousConversion.adcChannel = 9;*/
-     if(continuousConversion.adcChannel == 10)
-        continuousConversion.adcChannel = 9;
-    else
-        continuousConversion.adcChannel = 10;
-    continuousConversion.sampleBuffer = sampleBufferOne;
-    continuousConversion.sampleBufferTwo = sampleBufferTwo;
-    continuousConversion.samplesRequestedCount = ADCBUFFERSIZE;
+    continuousConversionChannel[0].arg = &channelOne;
+    continuousConversionChannel[0].adcChannel = 9;
+    continuousConversionChannel[0].sampleBuffer = sampleBufferCh1One;
+    continuousConversionChannel[0].sampleBufferTwo = sampleBufferCh1Two;
+    continuousConversionChannel[0].samplesRequestedCount = ADCBUFFERSIZE;
+
+    continuousConversionChannel[1].arg = &channelTwo;
+    continuousConversionChannel[1].adcChannel = 10;
+    continuousConversionChannel[1].sampleBuffer = sampleBufferCh2One;
+    continuousConversionChannel[1].sampleBufferTwo = sampleBufferCh2Two;
+    continuousConversionChannel[1].samplesRequestedCount = ADCBUFFERSIZE;
 
     if (!adcBuf){
         System_abort("adcBuf did not open correctly\n");
     }
 
     /* Start converting. */
-    if (ADCBuf_convert(adcBuf, &continuousConversion, 1) !=
-        ADCBuf_STATUS_SUCCESS) {
+    if (ADCBuf_convert(adcBuf, continuousConversionChannel, 2) != ADCBuf_STATUS_SUCCESS) {
         System_abort("Did not start conversion process correctly\n");
     }
 
