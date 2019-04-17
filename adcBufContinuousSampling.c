@@ -135,7 +135,7 @@ void conversionStartFxn(UArg arg0, UArg arg1) {
     ADCBuf_Params adcBufParams;
 
     UART_Params_init(&uartParams);
-    uartParams.writeDataMode = UART_DATA_TEXT;
+    uartParams.writeDataMode = UART_DATA_BINARY;
     uartParams.writeMode = UART_MODE_CALLBACK;
     uartParams.writeCallback = uartWriteCallback;
     uartParams.readDataMode = UART_DATA_TEXT;
