@@ -47,15 +47,13 @@
 #include <ti/drivers/ADCBuf.h>
 #include <ti/drivers/UART.h>
 
-#if defined(CC2650DK_7ID) || defined(CC1310DK_7XD)
-#include <ti/drivers/PIN.h>
-#endif
-
 /* Example/Board Header files */
 #include "Board.h"
 
 #define TASKSTACKSIZE    (768)
 #define ADCBUFFERSIZE    (1)
+#define UART_WRITE_BUFFER_SIZE (10)
+#define UART_READ_BUFFER_SIZE (3)
 
 Task_Struct task0Struct;
 Char task0Stack[TASKSTACKSIZE];
@@ -66,9 +64,14 @@ uint16_t sampleBufferCh2One[ADCBUFFERSIZE];
 uint16_t sampleBufferCh2Two[ADCBUFFERSIZE];
 uint32_t microVoltBuffer[ADCBUFFERSIZE];
 uint32_t buffersCompletedCounter = 0;
-char uartTxBuffer[10];
+uint_fast16_t uartOutputBufferSize = 0;
+
+char uartWriteBuffer[UART_WRITE_BUFFER_SIZE];
+char uartReadBuffer[UART_READ_BUFFER_SIZE];
+char endLineSequence[UART_READ_BUFFER_SIZE] = "end";
 
 uint32_t lastValue = NULL;
+uint32_t time = 0;
 
 ADCBuf_Conversion continuousConversionChannel[2];
 int channelOne = 1;
@@ -76,6 +79,7 @@ int channelTwo = 2;
 
 /* Driver handle shared between the task and the callback function */
 UART_Handle uart;
+
 
 /*
  * This function is called whenever a buffer is full.
@@ -85,12 +89,9 @@ UART_Handle uart;
  */
 void adcBufCallback(ADCBuf_Handle handle, ADCBuf_Conversion *conversion,
     void *completedADCBuffer, uint32_t completedChannel) {
-    uint_fast16_t uartTxBufferOffset;
 
-    ADCBuf_adjustRawValues(handle, completedADCBuffer, ADCBUFFERSIZE,
-        completedChannel);
-    ADCBuf_convertAdjustedToMicroVolts(handle, completedChannel,
-        completedADCBuffer, microVoltBuffer, ADCBUFFERSIZE);
+    ADCBuf_adjustRawValues(handle, completedADCBuffer, ADCBUFFERSIZE, completedChannel);
+    ADCBuf_convertAdjustedToMicroVolts(handle, completedChannel, completedADCBuffer, microVoltBuffer, ADCBUFFERSIZE);
 
     if (conversion->arg == &channelOne) {
         lastValue = microVoltBuffer[0];
@@ -99,18 +100,29 @@ void adcBufCallback(ADCBuf_Handle handle, ADCBuf_Conversion *conversion,
     } else {
         uint32_t difference = lastValue - microVoltBuffer[0];
 
-        uartTxBufferOffset = System_sprintf(uartTxBuffer, "%d\n", difference);
-        UART_write(uart, uartTxBuffer, uartTxBufferOffset + 1);
+        uartOutputBufferSize = System_sprintf(uartWriteBuffer, "%d,%d;", time++, difference);
+        UART_write(uart, uartWriteBuffer, uartOutputBufferSize + 1);
+        UART_read(uart, uartReadBuffer, UART_READ_BUFFER_SIZE);
 
         ADCBuf_convert(handle, &continuousConversionChannel[0], 1);
     }
 }
 
-/*
- * Callback function to use the UART in callback mode. It does nothing.
- */
-void uartCallback(UART_Handle handle, void *buf, size_t count) {
-   return;
+void uartWriteCallback(UART_Handle handle, void *buf, size_t count) {
+    return;
+}
+
+void uartReadCallback(UART_Handle handle, void *buf, size_t count) {
+    int i;
+
+    for (i = 0; i < UART_READ_BUFFER_SIZE; i++) {
+        if (((char*) buf)[i] != endLineSequence[i]) {
+            return;
+        }
+    }
+
+    uartOutputBufferSize = System_sprintf(uartWriteBuffer, "\r\n");
+    UART_write(handle, uartWriteBuffer, uartOutputBufferSize + 1);
 }
 
 /*
@@ -122,40 +134,22 @@ void conversionStartFxn(UArg arg0, UArg arg1) {
     ADCBuf_Handle adcBuf;
     ADCBuf_Params adcBufParams;
 
-/*
- * The CC2650DK_7ID and CC1310DK_7XD measure an ambient light sensor in this example.
- * It is not powered by default to avoid high current consumption in other examples.
- * The code below turns on the power to the sensor.
- */
-#if defined(CC2650DK_7ID) || defined(CC1310DK_7XD)
-    PIN_State pinState;
-
-    PIN_Config AlsPinTable[] =
-    {
-        Board_ALS_PWR    | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH    | PIN_PUSHPULL, /* Turn on ALS power */
-        PIN_TERMINATE                                                            /* Terminate list */
-    };
-
-    /* Turn on the power to the ambient light sensor */
-    PIN_open(&pinState, AlsPinTable);
-#endif
-
-    /* Create a UART with data processing off. */
     UART_Params_init(&uartParams);
-    uartParams.writeDataMode = UART_DATA_BINARY;
+    uartParams.writeDataMode = UART_DATA_TEXT;
     uartParams.writeMode = UART_MODE_CALLBACK;
-    uartParams.writeCallback = uartCallback;
+    uartParams.writeCallback = uartWriteCallback;
+    uartParams.readDataMode = UART_DATA_TEXT;
+    uartParams.readMode = UART_MODE_CALLBACK;
+    uartParams.readCallback = uartReadCallback;
     uartParams.baudRate = 115200;
     uart = UART_open(Board_UART0, &uartParams);
 
-    /* Set up an ADCBuf peripheral in ADCBuf_RECURRENCE_MODE_CONTINUOUS */
     ADCBuf_Params_init(&adcBufParams);
     adcBufParams.callbackFxn = adcBufCallback;
     adcBufParams.recurrenceMode = ADCBuf_RECURRENCE_MODE_ONE_SHOT;
     adcBufParams.returnMode = ADCBuf_RETURN_MODE_CALLBACK;
     adcBufParams.samplingFrequency = 1;
     adcBuf = ADCBuf_open(Board_ADCBuf0, &adcBufParams);
-
 
     /* Configure the conversion struct */
     continuousConversionChannel[0].arg = &channelOne;
