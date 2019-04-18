@@ -34,6 +34,7 @@
  */
 
 #include <stdint.h>
+#include <string.h>
 
 /* XDCtools Header files */
 #include <xdc/std.h>
@@ -58,24 +59,17 @@
 Task_Struct task0Struct;
 Char task0Stack[TASKSTACKSIZE];
 
-uint16_t sampleBufferCh1One[ADCBUFFERSIZE];
-uint16_t sampleBufferCh1Two[ADCBUFFERSIZE];
-uint16_t sampleBufferCh2One[ADCBUFFERSIZE];
-uint16_t sampleBufferCh2Two[ADCBUFFERSIZE];
+uint16_t sampleBufferOne[ADCBUFFERSIZE];
+uint16_t sampleBufferTwo[ADCBUFFERSIZE];
 uint32_t microVoltBuffer[ADCBUFFERSIZE];
 uint32_t buffersCompletedCounter = 0;
 uint_fast16_t uartOutputBufferSize = 0;
 
 char uartWriteBuffer[UART_WRITE_BUFFER_SIZE];
 char uartReadBuffer[UART_READ_BUFFER_SIZE];
-char endLineSequence[UART_READ_BUFFER_SIZE] = "end";
+char endLineSequence[] = "end";
 
-uint32_t lastValue = NULL;
 uint32_t time = 0;
-
-ADCBuf_Conversion continuousConversionChannel[2];
-int channelOne = 1;
-int channelTwo = 2;
 
 /* Driver handle shared between the task and the callback function */
 UART_Handle uart;
@@ -93,19 +87,9 @@ void adcBufCallback(ADCBuf_Handle handle, ADCBuf_Conversion *conversion,
     ADCBuf_adjustRawValues(handle, completedADCBuffer, ADCBUFFERSIZE, completedChannel);
     ADCBuf_convertAdjustedToMicroVolts(handle, completedChannel, completedADCBuffer, microVoltBuffer, ADCBUFFERSIZE);
 
-    if (conversion->arg == &channelOne) {
-        lastValue = microVoltBuffer[0];
-
-        ADCBuf_convert(handle, &continuousConversionChannel[1], 1);
-    } else {
-        uint32_t difference = lastValue - microVoltBuffer[0];
-
-        uartOutputBufferSize = System_sprintf(uartWriteBuffer, "%d,%d;", time++, difference);
-        UART_write(uart, uartWriteBuffer, uartOutputBufferSize + 1);
-        UART_read(uart, uartReadBuffer, UART_READ_BUFFER_SIZE);
-
-        ADCBuf_convert(handle, &continuousConversionChannel[0], 1);
-    }
+    uartOutputBufferSize = System_sprintf(uartWriteBuffer, "%d,%d;", time++, microVoltBuffer[0]);
+    UART_write(uart, uartWriteBuffer, uartOutputBufferSize + 1);
+    UART_read(uart, uartReadBuffer, UART_READ_BUFFER_SIZE);
 }
 
 void uartWriteCallback(UART_Handle handle, void *buf, size_t count) {
@@ -113,12 +97,10 @@ void uartWriteCallback(UART_Handle handle, void *buf, size_t count) {
 }
 
 void uartReadCallback(UART_Handle handle, void *buf, size_t count) {
-    int i;
+    int comparissonResult = strcmp(endLineSequence, buf);
 
-    for (i = 0; i < UART_READ_BUFFER_SIZE; i++) {
-        if (((char*) buf)[i] != endLineSequence[i]) {
-            return;
-        }
+    if (comparissonResult) {
+        return;
     }
 
     uartOutputBufferSize = System_sprintf(uartWriteBuffer, "\r\n");
@@ -133,6 +115,7 @@ void conversionStartFxn(UArg arg0, UArg arg1) {
     UART_Params uartParams;
     ADCBuf_Handle adcBuf;
     ADCBuf_Params adcBufParams;
+    ADCBuf_Conversion continuousConversionChannel;
 
     UART_Params_init(&uartParams);
     uartParams.writeDataMode = UART_DATA_BINARY;
@@ -146,30 +129,24 @@ void conversionStartFxn(UArg arg0, UArg arg1) {
 
     ADCBuf_Params_init(&adcBufParams);
     adcBufParams.callbackFxn = adcBufCallback;
-    adcBufParams.recurrenceMode = ADCBuf_RECURRENCE_MODE_ONE_SHOT;
+    adcBufParams.recurrenceMode = ADCBuf_RECURRENCE_MODE_CONTINUOUS;
     adcBufParams.returnMode = ADCBuf_RETURN_MODE_CALLBACK;
     adcBufParams.samplingFrequency = 1;
     adcBuf = ADCBuf_open(Board_ADCBuf0, &adcBufParams);
 
     /* Configure the conversion struct */
-    continuousConversionChannel[0].arg = &channelOne;
-    continuousConversionChannel[0].adcChannel = 9;
-    continuousConversionChannel[0].sampleBuffer = sampleBufferCh1One;
-    continuousConversionChannel[0].sampleBufferTwo = sampleBufferCh1Two;
-    continuousConversionChannel[0].samplesRequestedCount = ADCBUFFERSIZE;
-
-    continuousConversionChannel[1].arg = &channelTwo;
-    continuousConversionChannel[1].adcChannel = 10;
-    continuousConversionChannel[1].sampleBuffer = sampleBufferCh2One;
-    continuousConversionChannel[1].sampleBufferTwo = sampleBufferCh2Two;
-    continuousConversionChannel[1].samplesRequestedCount = ADCBUFFERSIZE;
+    continuousConversionChannel.arg = NULL;
+    continuousConversionChannel.adcChannel = CC1350_LAUNCHXL_ADC5;
+    continuousConversionChannel.sampleBuffer = sampleBufferOne;
+    continuousConversionChannel.sampleBufferTwo = sampleBufferTwo;
+    continuousConversionChannel.samplesRequestedCount = ADCBUFFERSIZE;
 
     if (!adcBuf){
         System_abort("adcBuf did not open correctly\n");
     }
 
     /* Start converting. */
-    if (ADCBuf_convert(adcBuf, continuousConversionChannel, 2) != ADCBuf_STATUS_SUCCESS) {
+    if (ADCBuf_convert(adcBuf, &continuousConversionChannel, 1) != ADCBuf_STATUS_SUCCESS) {
         System_abort("Did not start conversion process correctly\n");
     }
 
