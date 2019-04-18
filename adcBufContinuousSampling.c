@@ -131,12 +131,12 @@ void conversionStartFxn(UArg arg0, UArg arg1) {
     adcBufParams.callbackFxn = adcBufCallback;
     adcBufParams.recurrenceMode = ADCBuf_RECURRENCE_MODE_CONTINUOUS;
     adcBufParams.returnMode = ADCBuf_RETURN_MODE_CALLBACK;
-    adcBufParams.samplingFrequency = 1;
+    adcBufParams.samplingFrequency = 10;
     adcBuf = ADCBuf_open(Board_ADCBuf0, &adcBufParams);
 
     /* Configure the conversion struct */
     continuousConversionChannel.arg = NULL;
-    continuousConversionChannel.adcChannel = CC1350_LAUNCHXL_ADC5;
+    continuousConversionChannel.adcChannel = CC1350_LAUNCHXL_ADCVDDS;
     continuousConversionChannel.sampleBuffer = sampleBufferOne;
     continuousConversionChannel.sampleBufferTwo = sampleBufferTwo;
     continuousConversionChannel.samplesRequestedCount = ADCBUFFERSIZE;
