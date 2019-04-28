@@ -46,16 +46,17 @@
 #include <ti/drivers/PIN.h>
 #include <driverlib/rf_prop_mailbox.h>
 
+/* Board Header files */
+#include "Board.h"
+
 /* TI-RTOS Header files */
 #include <ti/drivers/UART.h>
 
-/* Board Header files */
-#include "Board.h"
+
 
 #include "RFQueue.h"
 #include "smartrf_settings/smartrf_settings.h"
 
-#include <stdlib.h>
 
 #define TASKSTACKSIZE    (768)
 #define UART_WRITE_BUFFER_SIZE (10)
