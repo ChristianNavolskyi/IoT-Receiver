@@ -52,8 +52,6 @@
 /* TI-RTOS Header files */
 #include <ti/drivers/UART.h>
 
-
-
 #include "RFQueue.h"
 #include "smartrf_settings/smartrf_settings.h"
 
@@ -61,54 +59,6 @@
 #define TASKSTACKSIZE    (768)
 #define UART_WRITE_BUFFER_SIZE (10)
 #define UART_READ_BUFFER_SIZE (3)
-
-Task_Struct task0Struct;
-Char task0Stack[TASKSTACKSIZE];
-
-uint32_t buffersCompletedCounter = 0;
-uint_fast16_t uartOutputBufferSize = 0;
-
-/* Pin driver handle */
-static PIN_Handle ledPinHandle;
-static PIN_State ledPinState;
-
-char uartWriteBuffer[UART_WRITE_BUFFER_SIZE];
-char uartReadBuffer[UART_READ_BUFFER_SIZE];
-char endLineSequence[] = "end";
-
-
-uint32_t time = 0;
-
-/* Driver handle shared between the task and the callback function */
-UART_Handle uart;
-
-
-
-void uartWriteCallback(UART_Handle handle, void *buf, size_t count) {
-    return;
-}
-
-void uartReadCallback(UART_Handle handle, void *buf, size_t count) {
-    int comparissonResult = strcmp(endLineSequence, buf);
-
-    if (comparissonResult) {
-        return;
-    }
-
-    uartOutputBufferSize = System_sprintf(uartWriteBuffer, "\r\n");
-    UART_write(handle, uartWriteBuffer, uartOutputBufferSize + 1);
-}
-
-/*
- * Application LED pin configuration table:
- *   - All LEDs board LEDs are off.
- */
-PIN_Config pinTable[] =
-{
-    Board_LED2 | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
-    PIN_TERMINATE
-};
-
 
 /***** Defines *****/
 #define RX_TASK_STACK_SIZE 1024
@@ -124,6 +74,26 @@ PIN_Config pinTable[] =
                                    * 1 status byte (RF_cmdPropRx.rxConf.bAppendStatus = 0x1) */
 
 
+
+Task_Struct task0Struct;
+Char task0Stack[TASKSTACKSIZE];
+
+UART_Handle uart;
+uint32_t buffersCompletedCounter = 0;
+uint_fast16_t uartOutputBufferSize = 0;
+char uartWriteBuffer[UART_WRITE_BUFFER_SIZE];
+char uartReadBuffer[UART_READ_BUFFER_SIZE];
+char endLineSequence[] = "end";
+
+uint32_t time = 0;
+
+/* Receive dataQueue for RF Core to fill in data */
+static dataQueue_t dataQueue;
+static rfc_dataEntryGeneral_t* currentDataEntry;
+static uint8_t packetLength;
+static uint8_t* packetDataPointer;
+
+static uint8_t packet[MAX_LENGTH + NUM_APPENDED_BYTES - 1]; /* The length byte is stored in a separate variable */
 
 /***** Prototypes *****/
 static void rxTaskFunction(UArg arg0, UArg arg1);
@@ -156,18 +126,24 @@ static RF_Handle rfHandle;
     #error This compiler is not supported.
 #endif
 
-/* Receive dataQueue for RF Core to fill in data */
-static dataQueue_t dataQueue;
-static rfc_dataEntryGeneral_t* currentDataEntry;
-static uint8_t packetLength;
-static uint8_t* packetDataPointer;
-
-static PIN_Handle pinHandle;
-
-static uint8_t packet[MAX_LENGTH + NUM_APPENDED_BYTES - 1]; /* The length byte is stored in a separate variable */
 
 
 /***** Function definitions *****/
+void uartWriteCallback(UART_Handle handle, void *buf, size_t count) {
+    return;
+}
+
+void uartReadCallback(UART_Handle handle, void *buf, size_t count) {
+    int comparissonResult = strcmp(endLineSequence, buf);
+
+    if (comparissonResult) {
+        return;
+    }
+
+    uartOutputBufferSize = System_sprintf(uartWriteBuffer, "\r\n");
+    UART_write(handle, uartWriteBuffer, uartOutputBufferSize + 1);
+}
+
 void RxTask_init(PIN_Handle ledPinHandle) {
     pinHandle = ledPinHandle;
 
@@ -252,9 +228,7 @@ void callback(RF_Handle h, RF_CmdHandle ch, RF_EventMask e)
 /*
  *  ======== main ========
  */
-int main(void)
-{
-    Task_Params taskParams;
+int main(void) {
     /* Call board init functions. */
     Board_initGeneral();
     Board_initUART();
