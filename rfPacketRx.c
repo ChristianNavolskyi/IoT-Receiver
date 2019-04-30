@@ -235,12 +235,18 @@ void callback(RF_Handle h, RF_CmdHandle ch, RF_EventMask e)
         memcpy(packet, packetDataPointer, (packetLength + 1));
         //uartWriteBuffer = packet;
 
-        uartOutputBufferSize = System_sprintf(uartWriteBuffer, "%d,%d;", packet[0], packet[1]);
+        uint32_t result = 0;
+        result |= packet[1];
+        result |= (packet[2] << 8);
+        result |= (packet[3] << 16);
+        result |= (packet[4] << 24);
+
+        uartOutputBufferSize = System_sprintf(uartWriteBuffer, "%d,%d;", packet[0], result);
         UART_write(uart, uartWriteBuffer, uartOutputBufferSize + 1);
         //UART_read(uart, uartReadBuffer, UART_READ_BUFFER_SIZE);
-
-        RFQueue_nextEntry();
     }
+
+    RFQueue_nextEntry();
 }
 
 /*
