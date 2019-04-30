@@ -236,9 +236,8 @@ void callback(RF_Handle h, RF_CmdHandle ch, RF_EventMask e)
         //uartWriteBuffer = packet;
 
         uartOutputBufferSize = System_sprintf(uartWriteBuffer, "%d,%d;", packet[0], packet[1]);
-            UART_write(uart, uartWriteBuffer, uartOutputBufferSize + 1);
-            UART_read(uart, uartReadBuffer, UART_READ_BUFFER_SIZE);
-
+        UART_write(uart, uartWriteBuffer, uartOutputBufferSize + 1);
+        //UART_read(uart, uartReadBuffer, UART_READ_BUFFER_SIZE);
 
         RFQueue_nextEntry();
     }
