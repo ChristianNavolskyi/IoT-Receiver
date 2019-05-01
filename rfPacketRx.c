@@ -43,7 +43,6 @@
 
 /* Drivers */
 #include <ti/drivers/rf/RF.h>
-#include <ti/drivers/PIN.h>
 #include <driverlib/rf_prop_mailbox.h>
 
 /* Board Header files */
@@ -144,8 +143,7 @@ void uartReadCallback(UART_Handle handle, void *buf, size_t count) {
     UART_write(handle, uartWriteBuffer, uartOutputBufferSize + 1);
 }
 
-void RxTask_init(PIN_Handle ledPinHandle) {
-    pinHandle = ledPinHandle;
+void RxTask_init() {
 
     Task_Params_init(&rxTaskParams);
     rxTaskParams.stackSize = RX_TASK_STACK_SIZE;
@@ -193,10 +191,10 @@ static void rxTaskFunction(UArg arg0, UArg arg1)
 
 void callback(RF_Handle h, RF_CmdHandle ch, RF_EventMask e)
 {
+    uartOutputBufferSize = System_sprintf(uartWriteBuffer, "CALL \r\n");
+    UART_write(uart, uartWriteBuffer, uartOutputBufferSize + 1);
     if (e & RF_EventRxEntryDone)
     {
-        /* Toggle pin to indicate RX */
-        PIN_setOutputValue(pinHandle, Board_LED2,!PIN_getOutputValue(Board_LED2));
 
         /* Get current unhandled data entry */
         currentDataEntry = RFQueue_getDataEntry();
@@ -246,18 +244,19 @@ int main(void) {
     uart = UART_open(Board_UART0, &uartParams);
 
 
-    /* Open LED pins */
-    ledPinHandle = PIN_open(&ledPinState, pinTable);
-    if(!ledPinHandle)
-    {
-        System_abort("Error initializing board LED pins\n");
-    }
+
+
 
     /* Initialize task */
-    RxTask_init(ledPinHandle);
+    RxTask_init();
 
     /* Start BIOS */
     BIOS_start();
+
+
+    uartOutputBufferSize = System_sprintf(uartWriteBuffer, "CCCC \r \n");
+    UART_write(uart, uartWriteBuffer, uartOutputBufferSize + 1);
+
 
     return (0);
 }
