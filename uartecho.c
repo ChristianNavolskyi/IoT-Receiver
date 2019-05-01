@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2017, Texas Instruments Incorporated
+ * Copyright (c) 2015-2019, Texas Instruments Incorporated
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,21 +31,58 @@
  */
 
 /*
- *  ======== ccfg.c ========
- *  Customer Configuration for CC26xx and CC13xx devices.  This file is used to
- *  configure Boot ROM, start-up code, and SW radio behaviour.
- *
- *  By default, driverlib startup_files/ccfg.c settings are used.  However, if
- *  changes are required there are two means to do so:
- *
- *    1.  Remove this file and copy driverlib's startup_files/ccfg.c file in
- *        its place.  Make all changes to the file.  Changes made are local to
- *        the project and will not affect other projects.
- *
- *    2.  Perform changes to driverlib startup_files/ccfg.c file.  Changes
- *        made to this file will be applied to all projects.  This file must
- *        remain unmodified.
+ *  ======== uartecho.c ========
  */
+#include <stdint.h>
+#include <stddef.h>
 
-#include <ti/devices/DeviceFamily.h>
-#include DeviceFamily_constructPath(startup_files/ccfg.c)
+/* Driver Header files */
+#include <ti/drivers/GPIO.h>
+#include <ti/drivers/UART.h>
+
+/* Example/Board Header files */
+#include "Board.h"
+
+/*
+ *  ======== mainThread ========
+ */
+void *mainThread(void *arg0)
+{
+    char        input;
+    const char  echoPrompt[] = "Echoing characters:\r\n";
+    UART_Handle uart;
+    UART_Params uartParams;
+
+    /* Call driver init functions */
+    GPIO_init();
+    UART_init();
+
+    /* Configure the LED pin */
+    GPIO_setConfig(Board_GPIO_LED0, GPIO_CFG_OUT_STD | GPIO_CFG_OUT_LOW);
+
+    /* Turn on user LED */
+    GPIO_write(Board_GPIO_LED0, Board_GPIO_LED_ON);
+
+    /* Create a UART with data processing off. */
+    UART_Params_init(&uartParams);
+    uartParams.writeDataMode = UART_DATA_BINARY;
+    uartParams.readDataMode = UART_DATA_BINARY;
+    uartParams.readReturnMode = UART_RETURN_FULL;
+    uartParams.readEcho = UART_ECHO_OFF;
+    uartParams.baudRate = 115200;
+
+    uart = UART_open(Board_UART0, &uartParams);
+
+    if (uart == NULL) {
+        /* UART_open() failed */
+        while (1);
+    }
+
+    UART_write(uart, echoPrompt, sizeof(echoPrompt));
+
+    /* Loop forever echoing */
+    while (1) {
+        UART_read(uart, &input, 1);
+        UART_write(uart, &input, 1);
+    }
+}
