@@ -162,8 +162,6 @@ void *mainThread(void *arg0)
     }
 
 
-    printMessage(" UART Initialized \n");
-
     /* RF */
     RF_Params rfParams;
     RF_Params_init(&rfParams);
@@ -287,10 +285,8 @@ void *mainThread(void *arg0)
 
 void callback(RF_Handle h, RF_CmdHandle ch, RF_EventMask e)
 {
-    //printMessage("CALLME");
     if (e & RF_EventRxEntryDone)
     {
-        printMessage("PRINTME inside if");
         /* Toggle pin to indicate RX */
 
         /* Get current unhandled data entry */
@@ -302,7 +298,7 @@ void callback(RF_Handle h, RF_CmdHandle ch, RF_EventMask e)
         packetLength      = *(uint8_t*)(&currentDataEntry->data);
         packetDataPointer = (uint8_t*)(&currentDataEntry->data + 1);
 
-        /* Copy the payload + the status byte to the packet variable */
+        /* Copy the payload + the status byte to the packet variable*/
         memcpy(packet, packetDataPointer, (packetLength + 1));
 
         uint32_t value = 0;
@@ -311,11 +307,7 @@ void callback(RF_Handle h, RF_CmdHandle ch, RF_EventMask e)
         value |= packet[2] << 16;
         value |= packet[3] << 24;
 
-        /* Send packet */
-        uint32_t bufferSize = System_sprintf(uartBuffer, "Write UART\r\n");
-        UART_write(uart, uartBuffer, bufferSize + 1);
-
-        bufferSize = System_sprintf(uartBuffer, "RF: Receiving packet: %d\r\n", value);
+        uint32_t bufferSize = System_sprintf(uartBuffer, "%d,", value);
         UART_write(uart, uartBuffer, bufferSize + 1);
 
         RFQueue_nextEntry();
