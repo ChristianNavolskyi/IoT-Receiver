@@ -113,13 +113,13 @@ static uint8_t packet[MAX_LENGTH + NUM_APPENDED_BYTES - 1]; /* The length byte i
 
 /***** Function definitions *****/
 static UART_Handle uart;
-char uartBuffer[50];
+char uartBuffer[20];
+char uartCallbackBuffer[10];
 
 
 void printMessage(char *fmt) {
-
-        uint32_t bufferSize = System_sprintf(uartBuffer, fmt);
-        UART_write(uart, uartBuffer, bufferSize + 1);
+        uint32_t bufferSize = System_sprintf(uartCallbackBuffer, fmt);
+        UART_write(uart, uartCallbackBuffer, bufferSize + 1);
 
 }
 void printMessageWithArg(UART_Handle uart, char uartBuffer[], char const *fmt, int num, ...) {
@@ -134,6 +134,11 @@ void printMessageWithArg(UART_Handle uart, char uartBuffer[], char const *fmt, i
         va_end(args);
 }
 
+void uartCallback(UART_Handle handle, void *buf, size_t count) {
+    uint32_t bufferLength = System_sprintf(uartBuffer, "\n");
+    UART_write(handle, uartBuffer, bufferLength + 1);
+}
+
 void *mainThread(void *arg0)
 {
     /* Main UART */
@@ -143,15 +148,13 @@ void *mainThread(void *arg0)
     /* Call driver init functions */
     UART_init();
 
-
-
     /* Create a UART with data processing off. */
     UART_Params_init(&uartParams);
     uartParams.writeDataMode = UART_DATA_BINARY;
     uartParams.writeMode = UART_MODE_BLOCKING;
     uartParams.readDataMode = UART_DATA_BINARY;
-    uartParams.readReturnMode = UART_RETURN_FULL;
-    uartParams.readEcho = UART_ECHO_OFF;
+    uartParams.readMode = UART_MODE_CALLBACK;
+    uartParams.readCallback = uartCallback;
     uartParams.baudRate = 115200;
 
     uart = UART_open(Board_UART0, &uartParams);
